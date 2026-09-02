@@ -21,6 +21,19 @@ app.use(cors({ origin: "*" }));
 // Permite que o Express leia JSON no corpo das requisições
 app.use(express.json());
 
+// Em serverless, a conexão precisa estar pronta antes das rotas acessarem o banco.
+app.use(async (req, res, next) => {
+  try {
+    await conectarBanco();
+    next();
+  } catch (erro) {
+    res.status(503).json({
+      sucesso: false,
+      mensagem: "Banco de dados indisponível.",
+    });
+  }
+});
+
 // ─────────────────────────────────────────────
 // Rota de verificação (health check)
 // Útil para confirmar que a API está no ar
@@ -55,16 +68,19 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3001;
 
 const iniciar = async () => {
-  // Primeiro conecta ao banco, depois sobe o servidor
   await conectarBanco();
-
   app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
     console.log(`📋 Documentação: http://localhost:${PORT}/api/docs`);
   });
 };
 
-iniciar();
+if (require.main === module) {
+  iniciar().catch((erro) => {
+    console.error("❌ Não foi possível iniciar o servidor:", erro.message);
+    process.exitCode = 1;
+  });
+}
 
 // Exporta o app para o Vercel poder usar como serverless function
 module.exports = app;
